@@ -1,1 +1,139 @@
+# ==========================================
+# ADVANCED PANEL DATA MODELS - GMM IN PYTHON
+# ==========================================
 
+# 1. INSTALLATION OF REQUIRED LIBRARIES
+# Run these in your terminal or Jupyter Notebook cell if not already installed:
+# !pip install linear-models
+# !pip install py-dynpanel
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+# ==========================================
+# 2. DATA LOADING & BASIC PREPARATION
+# ==========================================
+
+# Load the exchange rate panel data file (Pen World Tables format)
+# Replace 'pen_xrate.xlsx' with your actual file path/name
+data = pd.read_excel('pen_xrate.xlsx')
+
+# Set panel data indices (drop=False keeps the cross-section and time variables)
+data = data.set_index(['ID', 'Year'], drop=False)
+
+# Display the first 5 rows of the dataset
+print("--- Data Head ---")
+print(data.head())
+
+# ==========================================
+# 3. TIME SERIES PLOTTING FOR PANEL DATA
+# ==========================================
+# Plotting the first 10 countries to avoid overcrowding
+
+# Extract unique country IDs
+country_ids = data['ID'].unique()[:10]
+
+# Set up subplot grid (2 rows, 5 columns)
+fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(15, 6))
+axes = axes.flatten()
+
+for idx, country_id in enumerate(country_ids):
+    # Filter data for each country
+    country_data = data[data['ID'] == country_id]
+    
+    # Plot xrate against time (assuming 'Year' and 'xrate' columns exist)
+    axes[idx].plot(country_data['Year'], country_data['xrate'])
+    axes[idx].set_title(str(country_id))
+    axes[idx].set_xlabel('Year')
+    axes[idx].set_ylabel('X-Rate')
+
+plt.tight_layout()
+plt.show()
+
+# ==========================================
+# 4. CREATING DUMMY VARIABLES
+# ==========================================
+# Converting the country ID categorical variable into dummies with a prefix
+dummies = pd.get_dummies(data['ID'], prefix='country', drop_first=False)
+
+# Join the dummies back to the main data frame
+data = pd.concat([data, dummies], axis=1)
+print("--- Updated Columns Count ---")
+print(data.columns)
+
+# ==========================================
+# 5. PANEL UNIT ROOT TEST (Fisher ADF Style Loop)
+# ==========================================
+# Python lacks a built-in panel unit root library, so we loop over cross-sections:
+from statsmodels.tsa.stattools import adfuller
+
+print("--- Running Unit Root Tests per Country ---")
+for country_id in data['ID'].unique():
+    country_subset = data[data['ID'] == country_id]
+    series = country_subset['xrate'].dropna()
+    if len(series) > 10:  # Ensure enough observations
+        res = adfuller(series, maxlag=3)
+        # print(f"Country {country_id}: ADF Statistic = {res[0]:.4f}, P-value = {res[1]:.4f}")
+
+
+# ==========================================
+# 6. DATA TRANSFORMATION: LOGARITHMS
+# ==========================================
+# Ensure series are numeric (float) before applying log
+data['xrate'] = data['xrate'].astype(float)
+data['log_xrate'] = np.log(data['xrate'])
+
+
+# ==========================================
+# 7. MERGING MULTIPLE DATASETS (Outer Join Example)
+# ==========================================
+# Example reading and merging two different Excel data files
+data1 = pd.read_excel('Jessa_2.xlsx')
+data2 = pd.read_excel('other_data.xlsx')
+
+# Standardize identifier column names if necessary
+data1['country'] = data1['Nation']
+
+# Merge using an 'outer' join to preserve all countries despite naming discrepancies
+merged_data = pd.merge(data1, data2, on=['country', 'Year'], how='outer')
+print("--- Merged Data Head ---")
+print(merged_data.head())
+
+
+# ==========================================
+# 8. DYNAMIC PANEL DATA MODELS (GMM)
+# ==========================================
+# Preparing lags for Dynamic Panel Data estimation
+# Group by ID and shift by 1 to create lag of the dependent variable
+data['lag_xrate'] = data.groupby('ID')['xrate'].shift(1)
+data['lag2_xrate'] = data.groupby('ID')['xrate'].shift(2)
+
+# Drop missing values resulting from lagging
+model_data = data.dropna(subset=['xrate', 'lag_xrate', 'PPP']).copy()
+
+# Reset index to allow un-declaring/re-declaring if required by panel packages
+model_data = model_data.reset_index(drop=True)
+
+# ------------------------------------------
+# Difference GMM & System GMM Estimation
+# (Using linearmodels / pyDYN framework)
+# ------------------------------------------
+from linearmodels.panel import PanelOLS
+# Note: For full System/Difference GMM estimation equations, specialized 
+# packages like `py-dynpanel` or custom moment conditions are used:
+
+print("""
+To estimate Difference and System GMM models in Python:
+1. Ensure 'py-dynpanel' or equivalent panel GMM libraries are imported.
+2. Specify your dependent variable, lagged dependent variables, 
+   exogenous variables (e.g., PPP), and instruments.
+3. Example syntax structure for Panel GMM:
+   
+   # mod = DifferenceGMM(dependent=model_data['xrate'], 
+   #                     exog=model_data[['PPP']], 
+   #                     lags=1, ...)
+   # res = mod.fit()
+   # print(res.summary)
+""")
