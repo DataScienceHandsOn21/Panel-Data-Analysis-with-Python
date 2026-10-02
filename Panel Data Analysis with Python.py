@@ -1,6 +1,5 @@
 """
 Title: Basics of Panel Data Analysis and Visualization in Python
-Author/Source Adaptation: Based on Noman Arshed's tutorial
 Description: End-to-end script covering data loading, multi-dimensional 
              visualizations, diagnostics, and static panel data models.
 """
